@@ -242,11 +242,16 @@ func (c *Cron) run() {
 
 	// Figure out the next activation times for each entry.
 	now := c.now()
+	sorted := new(EntryHeap)
 	for _, entry := range c.entries {
 		entry.Next = entry.Schedule.Next(now)
+		if entry.Schedule.Once() && now.After(entry.Next) {
+			continue
+		}
+		heap.Push(sorted, entry)
 		c.logger.Info("schedule", "now", now, "entry", entry.ID, "next", entry.Next)
 	}
-
+	c.entries = *sorted
 	for {
 		// Determine the next entry to run.
 		// sort.Sort(byTime(c.entries))
@@ -285,6 +290,11 @@ func (c *Cron) run() {
 				timer.Stop()
 				now = c.now()
 				newEntry.Next = newEntry.Schedule.Next(now)
+				if newEntry.Schedule.Once() {
+					if now.After(newEntry.Next) {
+						continue
+					}
+				}
 				heap.Push(&c.entries, newEntry)
 				c.logger.Info("added", "now", now, "entry", newEntry.ID, "next", newEntry.Next)
 
