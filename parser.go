@@ -430,5 +430,35 @@ func parseDescriptor(descriptor string, loc *time.Location) (Schedule, error) {
 		return Every(duration), nil
 	}
 
+	const once = "@once "
+	if strings.HasPrefix(descriptor, once) {
+		runDate, err := time.Parse(time.RFC3339, strings.Replace(descriptor, once, "", 1))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse duration %s: %s", descriptor, err)
+		}
+
+		var (
+			second = uint(runDate.Second())
+			minute = uint(runDate.Minute())
+			hour   = uint(runDate.Hour())
+			dom    = uint(runDate.Day())
+			month  = uint(runDate.Month())
+			year   = uint(runDate.Year())
+		)
+
+		ret := &SpecSchedule{
+			Second:   uint64(second),
+			Minute:   uint64(minute),
+			Hour:     uint64(hour),
+			Dom:      uint64(dom),
+			Month:    uint64(month),
+			Year:     uint64(year),
+			Dow:      all(dow),
+			IsOnce:   true,
+			Location: runDate.Location(),
+		}
+		return ret, nil
+	}
+
 	return nil, fmt.Errorf("unrecognized descriptor: %s", descriptor)
 }

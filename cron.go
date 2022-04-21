@@ -41,6 +41,7 @@ type Schedule interface {
 	// Next returns the next activation time, later than the given time.
 	// Next is invoked initially, and then each time the job is run.
 	Next(time.Time) time.Time
+	Once() bool
 }
 
 // EntryID identifies an entry within a Cron instance
@@ -272,9 +273,11 @@ func (c *Cron) run() {
 					}
 					e = heap.Pop(&c.entries).(*Entry)
 					c.startJob(e.WrappedJob)
-					e.Prev = e.Next
-					e.Next = e.Schedule.Next(now)
-					heap.Push(&c.entries, e)
+					if !e.Schedule.Once() {
+						e.Prev = e.Next
+						e.Next = e.Schedule.Next(now)
+						heap.Push(&c.entries, e)
+					}
 					c.logger.Info("run", "now", now, "entry", e.ID, "next", e.Next)
 				}
 

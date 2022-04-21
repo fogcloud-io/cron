@@ -5,8 +5,8 @@ import "time"
 // SpecSchedule specifies a duty cycle (to the second granularity), based on a
 // traditional crontab specification. It is computed initially and stored as bit sets.
 type SpecSchedule struct {
-	Second, Minute, Hour, Dom, Month, Dow uint64
-
+	Second, Minute, Hour, Dom, Month, Dow, Year uint64
+	IsOnce                                      bool
 	// Override location for this schedule.
 	Location *time.Location
 }
@@ -53,9 +53,17 @@ const (
 	starBit = 1 << 63
 )
 
+func (s *SpecSchedule) Once() bool {
+	return s.IsOnce
+}
+
 // Next returns the next time this schedule is activated, greater than the given
 // time.  If no time can be found to satisfy the schedule, return the zero time.
 func (s *SpecSchedule) Next(t time.Time) time.Time {
+	if s.Once() {
+		return time.Date(int(s.Year), time.Month(s.Month), int(s.Dom), int(s.Hour), int(s.Minute), int(s.Second), 0, s.Location)
+	}
+
 	// General approach
 	//
 	// For Month, Day, Hour, Minute, Second:
