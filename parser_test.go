@@ -166,6 +166,7 @@ func TestParseSchedule(t *testing.T) {
 				Month:    all(months),
 				Dow:      all(dow),
 				Location: time.Local,
+				Year:     0,
 			},
 		},
 	}
@@ -214,43 +215,43 @@ func TestNormalizeFields(t *testing.T) {
 			"AllFields_NoOptional",
 			[]string{"0", "5", "*", "*", "*", "*"},
 			Second | Minute | Hour | Dom | Month | Dow | Descriptor,
-			[]string{"0", "5", "*", "*", "*", "*"},
+			[]string{"0", "5", "*", "*", "*", "*", "*"},
 		},
 		{
 			"AllFields_SecondOptional_Provided",
-			[]string{"0", "5", "*", "*", "*", "*"},
+			[]string{"0", "5", "*", "*", "*", "*", "*"},
 			SecondOptional | Minute | Hour | Dom | Month | Dow | Descriptor,
-			[]string{"0", "5", "*", "*", "*", "*"},
+			[]string{"0", "5", "*", "*", "*", "*", "*"},
 		},
 		{
 			"AllFields_SecondOptional_NotProvided",
 			[]string{"5", "*", "*", "*", "*"},
 			SecondOptional | Minute | Hour | Dom | Month | Dow | Descriptor,
-			[]string{"0", "5", "*", "*", "*", "*"},
+			[]string{"0", "5", "*", "*", "*", "*", "*"},
 		},
 		{
 			"SubsetFields_NoOptional",
 			[]string{"5", "15", "*"},
 			Hour | Dom | Month,
-			[]string{"0", "0", "5", "15", "*", "*"},
+			[]string{"0", "0", "5", "15", "*", "*", "*"},
 		},
 		{
 			"SubsetFields_DowOptional_Provided",
 			[]string{"5", "15", "*", "4"},
 			Hour | Dom | Month | DowOptional,
-			[]string{"0", "0", "5", "15", "*", "4"},
+			[]string{"0", "0", "5", "15", "*", "4", "*"},
 		},
 		{
 			"SubsetFields_DowOptional_NotProvided",
 			[]string{"5", "15", "*"},
 			Hour | Dom | Month | DowOptional,
-			[]string{"0", "0", "5", "15", "*", "*"},
+			[]string{"0", "0", "5", "15", "*", "*", "*"},
 		},
 		{
 			"SubsetFields_SecondOptional_NotProvided",
 			[]string{"5", "15", "*"},
 			SecondOptional | Hour | Dom | Month,
-			[]string{"0", "0", "5", "15", "*", "*"},
+			[]string{"0", "0", "5", "15", "*", "*", "*"},
 		},
 	}
 
@@ -258,10 +259,10 @@ func TestNormalizeFields(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			actual, err := normalizeFields(test.input, test.options)
 			if err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("case :%s: unexpected error: %v", test.name, err)
 			}
 			if !reflect.DeepEqual(actual, test.expected) {
-				t.Errorf("expected %v, got %v", test.expected, actual)
+				t.Errorf("case: %s: expected %v, got %v", test.name, test.expected, actual)
 			}
 		})
 	}
@@ -320,7 +321,7 @@ func TestStandardSpecSchedule(t *testing.T) {
 	}{
 		{
 			expr:     "5 * * * *",
-			expected: &SpecSchedule{1 << seconds.min, 1 << 5, all(hours), all(dom), all(months), all(dow), 0, false, time.Local},
+			expected: &SpecSchedule{1 << seconds.min, 1 << 5, all(hours), all(dom), all(months), all(dow), 0, false, time.Local, nil},
 		},
 		{
 			expr:     "@every 5m",
@@ -335,8 +336,8 @@ func TestStandardSpecSchedule(t *testing.T) {
 			err:  "expected exactly 5 fields",
 		},
 		{
-			expr: "@once 2022-01-01T00:00:00+08:00",
-			expected: &SpecSchedule{0, 0, 0, 1, 1, all(dow), 2022, true, time.Local},
+			expr:     "@once 2022-01-01T00:00:00+08:00",
+			expected: &SpecSchedule{0, 0, 0, 1, 1, all(dow), 2022, true, time.Local, nil},
 		},
 	}
 
@@ -363,15 +364,15 @@ func TestNoDescriptorParser(t *testing.T) {
 }
 
 func every5min(loc *time.Location) *SpecSchedule {
-	return &SpecSchedule{1 << 0, 1 << 5, all(hours), all(dom), all(months), all(dow), 0, false, loc}
+	return &SpecSchedule{1 << 0, 1 << 5, all(hours), all(dom), all(months), all(dow), 0, false, loc, nil}
 }
 
 func every5min5s(loc *time.Location) *SpecSchedule {
-	return &SpecSchedule{1 << 5, 1 << 5, all(hours), all(dom), all(months), all(dow), 0, false, loc}
+	return &SpecSchedule{1 << 5, 1 << 5, all(hours), all(dom), all(months), all(dow), 0, false, loc, nil}
 }
 
 func midnight(loc *time.Location) *SpecSchedule {
-	return &SpecSchedule{1, 1, 1, all(dom), all(months), all(dow), 0, false, loc}
+	return &SpecSchedule{1, 1, 1, all(dom), all(months), all(dow), 0, false, loc, nil}
 }
 
 func annual(loc *time.Location) *SpecSchedule {
@@ -382,6 +383,115 @@ func annual(loc *time.Location) *SpecSchedule {
 		Dom:      1 << dom.min,
 		Month:    1 << months.min,
 		Dow:      all(dow),
+		Year:     0,
 		Location: loc,
+	}
+}
+
+func TestOptionalYearSchedule(t *testing.T) {
+	parser := NewParser(Minute | Hour | Dom | Month | Dow | YearOptional)
+	entries := []struct {
+		expr     string
+		expected Schedule
+	}{
+		{"5 * * * * 2023", &SpecSchedule{
+			Second:   1 << seconds.min,
+			Minute:   1 << 5,
+			Hour:     all(hours),
+			Dom:      all(dom),
+			Month:    all(months),
+			Dow:      all(dow),
+			Year:     0,
+			Location: time.Local,
+			Years:    []int{2023},
+		}},
+		{"5 * * * * 2023-2025", &SpecSchedule{
+			Second:   1 << seconds.min,
+			Minute:   1 << 5,
+			Hour:     all(hours),
+			Dom:      all(dom),
+			Month:    all(months),
+			Dow:      all(dow),
+			Year:     0,
+			Location: time.Local,
+			Years:    []int{2023, 2024, 2025},
+		}},
+		{"5 * * * * 2023,2025,2026", &SpecSchedule{
+			Second:   1 << seconds.min,
+			Minute:   1 << 5,
+			Hour:     all(hours),
+			Dom:      all(dom),
+			Month:    all(months),
+			Dow:      all(dow),
+			Year:     0,
+			Location: time.Local,
+			Years:    []int{2023, 2025, 2026},
+		}},
+	}
+
+	for _, c := range entries {
+		actual, err := parser.Parse(c.expr)
+		if err != nil {
+			t.Errorf("%s => unexpected error %v", c.expr, err)
+		}
+		if !reflect.DeepEqual(actual, c.expected) {
+			t.Errorf("%s => expected %b, got %b", c.expr, c.expected, actual)
+		}
+	}
+}
+
+func Test_getYears(t *testing.T) {
+	type args struct {
+		field string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantY   []int
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+		{
+			name: "not int bound",
+			args: args{
+				field: "1912",
+			},
+			wantErr: true,
+			wantY: nil,
+		},
+		{
+			name: "enums",
+			args: args{
+				field: "2020,2021",
+			},
+			wantY: []int{2020, 2021},
+		},
+		{
+			name: "range",
+			args: args{
+				field: "2020-2025",
+			},
+			wantY: []int{2020, 2021, 2022, 2023, 2024, 2025},
+		},
+		{
+			name: "single",
+			args: args{
+				field: "2023",
+			},
+			wantY: []int{2023},
+		},
+
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotY, err := getYears(tt.args.field)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("case: %s, getYears() error = %v, wantErr %v", tt.name, err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotY, tt.wantY) {
+				t.Errorf("case: %s, getYears() = %v, want %v", tt.name, gotY, tt.wantY)
+			}
+		})
 	}
 }

@@ -3,6 +3,7 @@ package cron
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ const (
 	Dow                                    // Day of week field, default *
 	DowOptional                            // Optional day of week field, default *
 	Descriptor                             // Allow descriptors such as @monthly, @weekly, etc.
+	Year
+	YearOptional // Year field, default *
 )
 
 var places = []ParseOption{
@@ -33,12 +36,14 @@ var places = []ParseOption{
 	Dom,
 	Month,
 	Dow,
+	Year,
 }
 
 var defaults = []string{
 	"0",
 	"0",
 	"0",
+	"*",
 	"*",
 	"*",
 	"*",
@@ -56,18 +61,17 @@ type Parser struct {
 //
 // Examples
 //
-//  // Standard parser without descriptors
-//  specParser := NewParser(Minute | Hour | Dom | Month | Dow)
-//  sched, err := specParser.Parse("0 0 15 */3 *")
+//	// Standard parser without descriptors
+//	specParser := NewParser(Minute | Hour | Dom | Month | Dow)
+//	sched, err := specParser.Parse("0 0 15 */3 *")
 //
-//  // Same as above, just excludes time fields
-//  specParser := NewParser(Dom | Month | Dow)
-//  sched, err := specParser.Parse("15 */3 *")
+//	// Same as above, just excludes time fields
+//	specParser := NewParser(Dom | Month | Dow)
+//	sched, err := specParser.Parse("15 */3 *")
 //
-//  // Same as above, just makes Dow optional
-//  specParser := NewParser(Dom | Month | DowOptional)
-//  sched, err := specParser.Parse("15 */3")
-//
+//	// Same as above, just makes Dow optional
+//	specParser := NewParser(Dom | Month | DowOptional)
+//	sched, err := specParser.Parse("15 */3")
 func NewParser(options ParseOption) Parser {
 	optionals := 0
 	if options&DowOptional > 0 {
@@ -141,6 +145,11 @@ func (p Parser) Parse(spec string) (Schedule, error) {
 		return nil, err
 	}
 
+	years, err := getYears(fields[6])
+	if err != nil {
+		return nil, err
+	}
+
 	return &SpecSchedule{
 		Second:   second,
 		Minute:   minute,
@@ -149,6 +158,7 @@ func (p Parser) Parse(spec string) (Schedule, error) {
 		Month:    month,
 		Dow:      dayofweek,
 		Location: loc,
+		Years:    years,
 	}, nil
 }
 
@@ -166,6 +176,10 @@ func normalizeFields(fields []string, options ParseOption) ([]string, error) {
 	}
 	if options&DowOptional > 0 {
 		options |= Dow
+		optionals++
+	}
+	if options&YearOptional > 0 {
+		options |= Year
 		optionals++
 	}
 	if optionals > 1 {
@@ -196,6 +210,8 @@ func normalizeFields(fields []string, options ParseOption) ([]string, error) {
 			fields = append(fields, defaults[5]) // TODO: improve access to default
 		case options&SecondOptional > 0:
 			fields = append([]string{defaults[0]}, fields...)
+		case options&YearOptional > 0:
+			fields = append(fields, defaults[6])
 		default:
 			return nil, fmt.Errorf("unknown optional field")
 		}
@@ -246,8 +262,80 @@ func getField(field string, r bounds) (uint64, error) {
 	return bits, nil
 }
 
+func getYears(field string) (y []int, err error) {
+	if field == "*" {
+		return
+	}
+
+	if strings.Contains(field, "-") {
+		subs := strings.Split(field, "-")
+		if len(subs) != 2 {
+			return nil, fmt.Errorf("invalid year field %s", field)
+		}
+		start, err := strconv.Atoi(subs[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid year field %s", field)
+		}
+		end, err := strconv.Atoi(subs[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid year field %s", field)
+		}
+		return getYearRange(start, end)
+	}
+
+	conv := func(s string) (int, error) {
+		if s == "" {
+			return 0, fmt.Errorf("invalid year field %s", field)
+		}
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid year field %s", field)
+		}
+		if i < int64(years.min) || i > int64(years.max) {
+			return 0, fmt.Errorf("invalid year field %s", field)
+		}
+		return int(i), nil
+	}
+
+	if strings.Contains(field, ",") {
+		subs := strings.Split(field, ",")
+		if len(subs) < 2 {
+			return nil, fmt.Errorf("invalid year field %s", field)
+		}
+		for _, sub := range subs {
+			i, err := conv(sub)
+			if err != nil {
+				return nil, err
+			}
+			y = append(y, i)
+		}
+		sort.Ints(y)
+		return
+	}
+
+	i, err := conv(field)
+	if err != nil {
+		return nil, err
+	}
+	y = append(y, i)
+	return
+}
+
+func getYearRange(start, end int) (y []int, err error) {
+	if start < int(years.min) || end > int(years.max) {
+		return nil, fmt.Errorf("invalid year range %d-%d", start, end)
+	}
+	for i := start; i <= end; i++ {
+		y = append(y, i)
+	}
+	sort.Slice(y, func(i, j int) bool { return y[i] < y[j] })
+	return
+}
+
 // getRange returns the bits indicated by the given expression:
-//   number | number "-" number [ "/" number ]
+//
+//	number | number "-" number [ "/" number ]
+//
 // or error parsing range.
 func getRange(expr string, r bounds) (uint64, error) {
 	var (

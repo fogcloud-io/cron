@@ -9,6 +9,7 @@ type SpecSchedule struct {
 	IsOnce                                      bool
 	// Override location for this schedule.
 	Location *time.Location
+	Years    []int
 }
 
 // bounds provides a range of acceptable values (plus a map of name to value).
@@ -46,6 +47,7 @@ var (
 		"fri": 5,
 		"sat": 6,
 	}}
+	years = bounds{1970, 2999, nil}
 )
 
 const (
@@ -94,6 +96,20 @@ func (s *SpecSchedule) Next(t time.Time) time.Time {
 
 	// If no time is found within five years, return zero.
 	yearLimit := t.Year() + 5
+
+	// match years
+	if len(s.Years) > 0 {
+		{
+			for _, y := range s.Years {
+				currYear := t.Year()
+				if currYear == y {
+					break
+				} else if currYear < y {
+					t = t.AddDate(int(y-currYear), 0, 0)
+				}
+			}
+		}
+	}
 
 WRAP:
 	if t.Year() > yearLimit {
