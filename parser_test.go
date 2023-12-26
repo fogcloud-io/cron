@@ -457,7 +457,7 @@ func Test_getYears(t *testing.T) {
 				field: "1912",
 			},
 			wantErr: true,
-			wantY: nil,
+			wantY:   nil,
 		},
 		{
 			name: "enums",
@@ -480,7 +480,13 @@ func Test_getYears(t *testing.T) {
 			},
 			wantY: []int{2023},
 		},
-
+		{
+			name: "single",
+			args: args{
+				field: "2023,1999,2000",
+			},
+			wantY: []int{1999, 2000, 2023},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

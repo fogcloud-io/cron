@@ -100,13 +100,20 @@ func (s *SpecSchedule) Next(t time.Time) time.Time {
 	// match years
 	if len(s.Years) > 0 {
 		{
+			matched := false
 			for _, y := range s.Years {
 				currYear := t.Year()
 				if currYear == y {
+					matched = true
 					break
 				} else if currYear < y {
+					matched = true
 					t = t.AddDate(int(y-currYear), 0, 0)
+					break
 				}
+			}
+			if !matched {
+				return time.Time{}
 			}
 		}
 	}
